@@ -12,6 +12,10 @@ https://huggingface.co/spaces/billyae/anime-style-transfer-naive
 Generate Anime Character with Deep Learning Approach:
 https://huggingface.co/spaces/billyae/anime-style-transfer
 
+## Link to the Presenation Video
+
+https://www.youtube.com/watch?v=nMQfaxAPlp4&feature=youtu.be
+
 ## Data Source
 
 All images come from the “Anime Style Transfer” dataset by Vincent V on Kaggle (https://www.kaggle.com/datasets/vincentv/anime-style-transfer). It provides paired real‑world human photos and their corresponding anime‑style renderings.
