@@ -22,10 +22,19 @@ CLIP_BACKBONE    = 'openai/clip-vit-base-patch32'
 def stylize_image(path: str, palette: np.ndarray) -> Image.Image:
     """
     Read human image at `path`, apply palette+edges, convert to RGB PIL.
+    Args:
+        path (str): Path to the input image.
+        palette (np.ndarray): BGR palette of shape (PALETTE_SIZE, 3).
+    Returns:
+        Image.Image: Stylized image in RGB format.
     """
+
+    # load and convert to BGR
     human_bgr = cv2.imread(path)
     if human_bgr is None:
         raise RuntimeError(f"Failed to load {path}")
+    
+    # apply palette and edges
     out_bgr   = apply_palette_and_edges(human_bgr, palette)
     out_rgb   = cv2.cvtColor(out_bgr, cv2.COLOR_BGR2RGB)
     return Image.fromarray(out_rgb)
@@ -33,24 +42,40 @@ def stylize_image(path: str, palette: np.ndarray) -> Image.Image:
 def clip_cosine(clip_model, clip_proc, img1: Image.Image, img2: Image.Image) -> float:
     """
     Compute CLIP image‐to‐image cosine similarity.
+    Args:
+        clip_model (CLIPModel): Pretrained CLIP model.
+        clip_proc (CLIPProcessor): Pretrained CLIP processor.
+        img1 (Image.Image): First image.
+        img2 (Image.Image): Second image.
+    Returns:
+        float: Cosine similarity between the two images.
     """
+
     batch = clip_proc(images=[img1, img2], return_tensors='pt').to(DEVICE)
     with torch.no_grad():
         feats = clip_model.get_image_features(**batch)
     feats = feats / feats.norm(dim=-1, keepdim=True)
     return F.cosine_similarity(feats[0:1], feats[1:2]).item()
 
-if __name__ == '__main__':
-    # 1) learn palette from train labels
+def main():
+    """
+    1) Learn a global palette from training labels.
+    2) Load CLIP model.
+    3) Iterate over test images, stylize them, and compute CLIP similarity with GT.
+    4) Report average similarity.
+    Args:
+        None
+    """
+    # learn palette from training labels
     print("Learning palette from train labels…")
     palette = learn_palette_cv2(TRAIN_LABEL_DIR)
 
-    # 2) load CLIP
+    # load CLIP
     print("Loading CLIP model…")
     clip_model     = CLIPModel.from_pretrained(CLIP_BACKBONE).to(DEVICE)
     clip_processor = CLIPProcessor.from_pretrained(CLIP_BACKBONE)
 
-    # 3) iterate test images
+    # iterate test images
     sims = []
     for img_path in tqdm(sorted(glob.glob(os.path.join(TEST_IMG_DIR, '*'))), desc="Evaluating"):
         fn         = os.path.basename(img_path)
@@ -59,17 +84,21 @@ if __name__ == '__main__':
             print(f"  → no ground truth for {fn}, skipping")
             continue
 
-        # a) stylize and load GT
+        # stylize and load GT
         stylized = stylize_image(img_path, palette)
         gt       = Image.open(label_path).convert('RGB')
 
-        # b) compute CLIP similarity
+        # compute CLIP similarity
         sim = clip_cosine(clip_model, clip_processor, stylized, gt)
         sims.append(sim)
         print(f"{fn}: {sim:.4f}")
 
-    # 4) report
+    # report
     if sims:
         print(f"\nAverage CLIP similarity over {len(sims)} images: {np.mean(sims):.4f}")
     else:
         print("No images evaluated.")
+    
+if __name__ == '__main__':
+    main()
+    

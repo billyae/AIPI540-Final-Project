@@ -1,8 +1,3 @@
-"""
-Script to evaluate a fine-tuned Stable Diffusion + ControlNet pipeline on a test set using CLIP similarity.
-
-All parameters are set as variables below.
-"""
 import os
 import torch
 import torch.nn.functional as F
@@ -26,6 +21,12 @@ NUM_INFERENCE_STEPS = 20
 class ImageLabelDataset(Dataset):
     """Dataset pairing each test image with its matching label (anime target)."""
     def __init__(self, images_dir: str, labels_dir: str, img_size: int):
+        """
+        Args:
+            images_dir (str): Directory containing test images.
+            labels_dir (str): Directory containing corresponding labels.
+            img_size (int): Size to which images will be resized.
+        """
         self.images = sorted([os.path.join(images_dir, f) for f in os.listdir(images_dir)])
         self.labels = sorted([os.path.join(labels_dir, f) for f in os.listdir(labels_dir)])
         assert len(self.images) == len(self.labels), (
@@ -41,6 +42,12 @@ class ImageLabelDataset(Dataset):
         return len(self.images)
 
     def __getitem__(self, idx):
+        """
+        Args:
+            idx (int): Index of the sample to retrieve.
+        """
+
+        # Load and transform image and label
         img = Image.open(self.images[idx]).convert("RGB")
         lbl = Image.open(self.labels[idx]).convert("RGB")
         return {
@@ -53,18 +60,31 @@ class ImageLabelDataset(Dataset):
 def validate(pipe, loader, clip_model, clip_processor, device):
     """
     Compute average cosine similarity between generated and ground-truth anime images using CLIP.
+    Args:
+        pipe (StableDiffusionControlNetPipeline): The pipeline to generate images.
+        loader (DataLoader): DataLoader for the test dataset.
+        clip_model (CLIPModel): CLIP model for feature extraction.
+        clip_processor (CLIPProcessor): Processor for preparing inputs for CLIP.
+        device (str): Device to run the evaluation on.
+    Returns:
+        float: Average cosine similarity score.
     """
+
+    # Set models to evaluation mode
     pipe.unet.eval()
     clip_model.eval()
     sims = []
 
+    # Iterate through the DataLoader
     to_pil = transforms.ToPILImage()
     for batch in loader:
+
+        # Move batch to device
         prompts = batch["prompt"]
         cond_tensors = batch["controlnet_cond"].to(device)
         target_tensors = batch["pixel_values"].to(device)
 
-        # 1) Generate images
+        # Generate images
         cond_pils = [to_pil((t.cpu() * 0.5 + 0.5)) for t in cond_tensors]
         generated = pipe(
             prompt=prompts,
@@ -72,27 +92,35 @@ def validate(pipe, loader, clip_model, clip_processor, device):
             num_inference_steps=NUM_INFERENCE_STEPS
         ).images
 
-        # 2) Prepare target PIL images
+        # Prepare target PIL images
         target_pils = [to_pil((t.cpu() * 0.5 + 0.5)) for t in target_tensors]
 
-        # 3) CLIP inputs
+        # CLIP inputs
         inputs = clip_processor(
             images=generated + target_pils,
             return_tensors="pt"
         ).to(device)
 
-        # 4) Feature extraction and cosine sim
+        # Feature extraction and cosine sim
         with torch.no_grad():
             emb = clip_model.get_image_features(**inputs)
+
+        # Normalize embeddings
         gen_emb, tgt_emb = emb.chunk(2, dim=0)
         batch_sims = F.cosine_similarity(gen_emb, tgt_emb, dim=-1)
         sims.append(batch_sims.cpu())
 
+    # Concatenate all batch similarities and compute mean
     sims = torch.cat(sims)
     return sims.mean().item()
 
 
 def main():
+    """
+    Main function to load the model, prepare the dataset, and run evaluation.
+    Args:
+        None
+    """
     # Load fine-tuned SD+ControlNet pipeline
     pipe = StableDiffusionControlNetPipeline.from_pretrained(
         CHECKPOINT,

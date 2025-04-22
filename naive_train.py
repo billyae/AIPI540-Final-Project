@@ -3,21 +3,25 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-# ────────── PARAMETERS ──────────
 DATA_ROOT       = "./dataset/train"   # path to train/{images,labels}
 OUTPUT_DIR      = "./outputs"         # where to save stylized outputs
 PALETTE_SIZE    = 32                  # number of colours in the learned palette
 SAMPLES_PER_IMG = 2000                # how many pixels to sample per anime image
 EDGE_THRESH1    = 100                 # Canny lower threshold
 EDGE_THRESH2    = 200                 # Canny upper threshold
-# ────────────────────────────────────
 
 def learn_palette_cv2(label_dir):
     """
     Build a global colour palette by sampling pixels from all anime labels
     and clustering with OpenCV's kmeans.
     Returns an array of shape (PALETTE_SIZE, 3) in BGR order (uint8).
+    Args:
+        label_dir (str): Directory containing anime labels.
+    Returns:
+        np.ndarray: Palette of shape (PALETTE_SIZE, 3).
     """
+
+    # Sample pixels from all images
     samples = []
     for fn in tqdm(sorted(os.listdir(label_dir)), desc="Sampling anime pixels"):
         path = os.path.join(label_dir, fn)
@@ -47,6 +51,11 @@ def apply_palette_and_edges(human_bgr, palette):
     """
     1) Quantize each pixel in human_bgr to its nearest palette colour.
     2) Overlay Canny edges (drawn in black).
+    Args:
+        human_bgr (np.ndarray): Input image in BGR format.
+        palette (np.ndarray): Colour palette of shape (PALETTE_SIZE, 3).
+    Returns:
+        np.ndarray: Stylized image with quantized colours and edges.
     """
     h, w = human_bgr.shape[:2]
     flat = human_bgr.reshape(-1, 3).astype(np.int32)  # N×3
@@ -64,20 +73,29 @@ def apply_palette_and_edges(human_bgr, palette):
     gray  = cv2.cvtColor(human_bgr, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, threshold1=EDGE_THRESH1, threshold2=EDGE_THRESH2)
 
+    # Make edges black
     stylized = quant.copy()
     stylized[edges > 0] = (0, 0, 0)
     return stylized
 
 def main():
+    """
+    1) Learn a global palette from training labels.
+    2) Iterate over human images, stylize them, and save the outputs.
+    3) Report completion.
+    Args:
+        None
+    """
+    # Check directories
     img_dir   = os.path.join(DATA_ROOT, "images")
     label_dir = os.path.join(DATA_ROOT, "labels")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # 1) Learn the palette
+    # Learn the palette
     print(">> Learning colour palette from anime labels …")
     palette = learn_palette_cv2(label_dir)
 
-    # 2) Stylize each human image
+    # Stylize each human image
     print(">> Stylizing human images …")
     for fn in tqdm(sorted(os.listdir(img_dir)), desc="Stylizing"):
         human_path = os.path.join(img_dir, fn)

@@ -12,11 +12,22 @@ def extract_features(img, patch_radius=1):
     Given a H×W×3 image (as a numpy array in [0,1]),
     returns an array of shape (H*W, (2r+1)^2*3) with
     flattened RGB neighbourhoods around each pixel.
+    Each patch is centered on a pixel and includes its
+    neighbors in a square of side (2r+1).
+    Args:
+        img (np.ndarray): Input image as a numpy array.
+        patch_radius (int): Radius of the patch around each pixel.
+    Returns:
+        np.ndarray: Extracted features as a 2D array.
     """
+    
+    # pad image to avoid boundary issues
     H, W, _ = img.shape
     r = patch_radius
     pad = np.pad(img, ((r, r), (r, r), (0, 0)), mode='reflect')
     feats = []
+
+    # extract patches
     for dy in range(-r, r+1):
         for dx in range(-r, r+1):
             patch = pad[r+dy : r+dy+H, r+dx : r+dx+W]  # H×W×3
@@ -36,7 +47,19 @@ def build_dataset(
     Walk images/labels, extract features and targets.
     Optionally resizes images and labels to `target_size`.
     To keep memory down, we randomly sample a fraction of pixels.
+    Args:
+        image_dir (str): Directory containing input images.
+        label_dir (str): Directory containing target labels.
+        patch_radius (int): Radius of the patch around each pixel.
+        sample_fraction (float): Fraction of pixels to sample from each image.
+        target_size (tuple): Size to which images and labels will be resized.
+    Returns:
+        tuple: Tuple of numpy arrays (X, y) where X is the feature array
+               and y is the target array.
+
     """
+
+    # check directories
     all_X, all_y = [], []
     img_paths = sorted(glob.glob(os.path.join(image_dir, '*')))
     lbl_paths = sorted(glob.glob(os.path.join(label_dir, '*')))
@@ -96,10 +119,15 @@ def train(
         random_seed:     random seed for reproducibility
         model_out:       filepath to save the trained model
         target_size:     (width, height) to resize images and labels
+    Returns:
+        None
     """
+
+    # check directories
     img_dir = os.path.join(data_root, 'images')
     lbl_dir = os.path.join(data_root, 'labels')
-
+    
+    # Build dataset
     print(f"[1/4] Building dataset from {img_dir} & {lbl_dir} at {target_size}…")
     X, y = build_dataset(
         image_dir=img_dir,
@@ -109,7 +137,8 @@ def train(
         target_size=target_size
     )
     print(f"Total samples: {X.shape[0]:,}")
-
+    
+    # split into training and validation sets
     X_train, X_val, y_train, y_val = train_test_split(
         X, y,
         test_size=validation_frac,
@@ -117,6 +146,7 @@ def train(
     )
     print(f"[2/4] Training samples: {X_train.shape[0]:,}, Validation samples: {X_val.shape[0]:,}")
 
+    # train the RandomForestRegressor
     print(f"[3/4] Training RandomForestRegressor ({n_estimators} trees, max_depth={max_depth})…")
     rf = RandomForestRegressor(
         n_estimators=n_estimators,
@@ -127,6 +157,7 @@ def train(
     )
     rf.fit(X_train, y_train)
 
+    # evaluate on the validation set
     print("[4/4] Evaluating on validation set…")
     y_pred = rf.predict(X_val)
     mse = mean_squared_error(y_val, y_pred)
@@ -134,6 +165,7 @@ def train(
     print(f"Validation MSE: {mse:.6f}")
     print(f"Validation R^2: {r2:.4f}")
 
+    # save the trained model
     dump(rf, model_out)
     print(f"Model saved to '{model_out}'. Training complete.")
 
