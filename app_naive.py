@@ -5,7 +5,7 @@ import streamlit as st
 from PIL import Image
 
 # import your functions from naive.py
-from naive import learn_palette_cv2, apply_palette_and_edges
+from scripts.naive_train import learn_palette_cv2, apply_palette_and_edges
 
 # ──────────────────────────────────────────────────────────────────────────────
 LABEL_DIR = "./labels"

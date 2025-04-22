@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from transformers import CLIPProcessor, CLIPModel
 
 # import your naive pipeline
-from naive import learn_palette_cv2, apply_palette_and_edges
+from naive_train import learn_palette_cv2, apply_palette_and_edges
 
 # ─────────────── PARAMETERS ───────────────
 TRAIN_LABEL_DIR  = 'dataset/train/labels'
